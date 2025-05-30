@@ -359,9 +359,9 @@ async def on_run_test_battery_callback(cb: CallbackQuery, state: FSMContext, bot
     await bot.send_message(chat_id, instruction_text, reply_markup=battery_instruction_keyboard, parse_mode=ParseMode.HTML)
 
 # --- User Registration and Login Flow Handlers (Placeholders for brevity) ---
-# @router.callback_query(F.data == "user_is_new", UserData.waiting_for_first_time_response)
+@router.callback_query(F.data == "user_is_new", UserData.waiting_for_first_time_response)
 # async def handle_user_is_new_callback(cb: CallbackQuery, state: FSMContext, bot: Bot): pass
-# @router.callback_query(F.data == "user_is_returning", UserData.waiting_for_first_time_response)
+@router.callback_query(F.data == "user_is_returning", UserData.waiting_for_first_time_response)
 # async def handle_user_is_returning_callback(cb: CallbackQuery, state: FSMContext, bot: Bot): pass
 # @router.message(UserData.waiting_for_name)
 # async def process_name_input(message: Message, state: FSMContext, bot: Bot): pass
