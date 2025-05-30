@@ -36,6 +36,7 @@ from handlers.tests import (
     verbal_fluency_handlers,
     mental_rotation_handlers,
     raven_matrices_handlers,
+    short_term_memory_handlers,  # Added STM
 )
 
 logging.basicConfig(
@@ -268,6 +269,7 @@ async def main():
     dp.include_router(verbal_fluency_handlers.router)
     dp.include_router(mental_rotation_handlers.router)
     dp.include_router(raven_matrices_handlers.router)
+    dp.include_router(short_term_memory_handlers.router)  # Added STM
 
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Запуск поллинга...")

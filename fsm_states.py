@@ -69,4 +69,3 @@ class BatteryCycleStates(StatesGroup):
     medication_phase_inter_test_pause = State()
 
     battery_completed_prompt_next_action = State()  # Battery finished, prompt for what's next (e.g., placebo if implemented)
-    battery_stopped = State()  # State after /stopbattery
