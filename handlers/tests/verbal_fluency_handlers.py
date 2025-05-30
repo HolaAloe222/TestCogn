@@ -34,7 +34,8 @@ from utils.bot_helpers import (
     _clear_fsm_and_set_profile, # Added
     _safe_delete_message # Added
 )
-from handlers.common_handlers import battery_proceed_after_test_completion # For battery mode
+from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
+from handlers.common_handlers import TEST_REGISTRY, TEST_SEQUENCE # Import for passing to battery util
 
 from keyboards import (
     ACTION_SELECTION_KEYBOARD_RETURNING,
@@ -163,7 +164,7 @@ async def _end_verbal_fluency_test(
             mock_chat = Chat(id=chat_id, type=ChatType.PRIVATE)
             effective_trigger_msg = Message(message_id=0,date=int(time.time()),chat=mock_chat,from_user=mock_user,text="mock")
         if effective_trigger_msg:
-            await battery_proceed_after_test_completion(state, bot_instance, effective_trigger_msg)
+            await battery_proceed_after_test_completion(state, bot_instance, effective_trigger_msg, TEST_REGISTRY, TEST_SEQUENCE)
         else: logger.error("VF _end_test: Cannot proceed in battery, missing trigger context and chat_id.")
     elif profile_to_set and chat_id:
         effective_trigger_msg = trigger_event if isinstance(trigger_event, Message) else (trigger_event.message if trigger_event else None)

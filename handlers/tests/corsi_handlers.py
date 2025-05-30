@@ -25,7 +25,7 @@ from aiogram.types import (
 from aiogram.filters import StateFilter
 
 from fsm_states import CorsiTestStates, BatteryCycleStates
-from handlers.common_handlers import battery_proceed_after_test_completion
+from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
 from settings import ALL_EXPECTED_HEADERS, EXCEL_FILENAME, CORSI_HEADERS, BASE_HEADERS # Added CORSI_HEADERS, BASE_HEADERS
 from utils.bot_helpers import (
     send_main_action_menu,

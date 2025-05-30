@@ -28,7 +28,7 @@ from settings import (
     BASE_HEADERS # Added BASE_HEADERS
 )
 from utils.bot_helpers import get_active_profile_from_fsm
-from handlers.common_handlers import battery_proceed_after_test_completion
+from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
 
 
 logger = logging.getLogger(__name__)

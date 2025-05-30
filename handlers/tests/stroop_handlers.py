@@ -44,7 +44,7 @@ from utils.bot_helpers import (
     _clear_fsm_and_set_profile,
     _safe_delete_message,
 )
-from handlers.common_handlers import battery_proceed_after_test_completion # For battery mode
+from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
 
 from keyboards import ACTION_SELECTION_KEYBOARD_RETURNING
 
