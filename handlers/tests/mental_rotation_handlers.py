@@ -41,7 +41,7 @@ from utils.bot_helpers import (
     _safe_delete_message # Added
 )
 from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
-from handlers.common_handlers import TEST_REGISTRY, TEST_SEQUENCE # Import for passing to battery util
+from ..common_handlers import TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS # MODIFIED IMPORT
 
 from keyboards import (
     ACTION_SELECTION_KEYBOARD_RETURNING,
@@ -283,7 +283,7 @@ async def _finish_mental_rotation_test(state: FSMContext, bot_instance: Bot, cha
         await _clear_fsm_and_set_profile(state, profile_to_set)
         
         if is_battery:
-            if final_trigger_event: await battery_proceed_after_test_completion(state, bot_instance, final_trigger_event, TEST_REGISTRY, TEST_SEQUENCE)
+            if final_trigger_event: await battery_proceed_after_test_completion(state, bot_instance, final_trigger_event, TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS) # MODIFIED CALL
             else: logger.error("MR Finish: Cannot proceed in battery, missing trigger context.")
         elif profile_to_set and effective_chat_id:
             if final_trigger_event: await send_main_action_menu(bot_instance, final_trigger_event, ACTION_SELECTION_KEYBOARD_RETURNING)

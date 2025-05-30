@@ -26,7 +26,15 @@ from aiogram.filters import StateFilter
 
 from fsm_states import CorsiTestStates, BatteryCycleStates
 from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
-from settings import ALL_EXPECTED_HEADERS, EXCEL_FILENAME, CORSI_HEADERS, BASE_HEADERS # Added CORSI_HEADERS, BASE_HEADERS
+from settings import (
+    ALL_EXPECTED_HEADERS, 
+    EXCEL_FILENAME, 
+    CORSI_HEADERS, 
+    BASE_HEADERS,
+    TEST_REGISTRY, # New import from settings
+    BATTERY_TEST_SEQUENCE_KEYS # New import from settings
+)
+# Removed: from ..common_handlers import TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS 
 from utils.bot_helpers import (
     send_main_action_menu,
     get_active_profile_from_fsm,
@@ -526,7 +534,13 @@ async def evaluate_user_sequence(
         await _clear_fsm_and_set_profile(state, profile_to_set)
 
         if is_battery_mode:
-            await battery_proceed_after_test_completion(state, bot_instance, trigger_message)
+            await battery_proceed_after_test_completion(
+                state=state, 
+                bot_instance=bot_instance, 
+                trigger_event=trigger_message,
+                test_registry=TEST_REGISTRY, 
+                test_sequence=BATTERY_TEST_SEQUENCE_KEYS 
+            )
         elif profile_to_set:
             await send_main_action_menu(
                 bot_instance, trigger_message, ACTION_SELECTION_KEYBOARD_RETURNING,
@@ -754,3 +768,5 @@ async def on_corsi_stop_button_generic(
         bot=bot,
         called_from_test_button=True,
     )
+
+[end of handlers/tests/corsi_handlers.py]

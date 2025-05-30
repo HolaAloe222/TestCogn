@@ -25,10 +25,13 @@ from settings import (
     STM_HEADERS,
     EXCEL_FILENAME,
     ALL_EXPECTED_HEADERS, 
-    BASE_HEADERS # Added BASE_HEADERS
+    BASE_HEADERS, # Added BASE_HEADERS
+    TEST_REGISTRY, # New import from settings
+    BATTERY_TEST_SEQUENCE_KEYS # New import from settings
 )
 from utils.bot_helpers import get_active_profile_from_fsm
 from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
+# Removed: from handlers.common_handlers import TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS 
 
 
 logger = logging.getLogger(__name__)
@@ -196,7 +199,13 @@ async def _finish_stm_test(
         # Make sure that the state is correctly set for common_handlers to pick up
         # This is typically done by the calling test handler in common_handlers
         # For STM, this _finish_stm_test is the end, so it needs to call the battery progression
-        await battery_proceed_after_test_completion(state, bot_instance, trigger_event)
+        await battery_proceed_after_test_completion(
+            state=state, 
+            bot_instance=bot_instance, 
+            trigger_event=trigger_event,
+            test_registry=TEST_REGISTRY, 
+            test_sequence=BATTERY_TEST_SEQUENCE_KEYS 
+        )
     else: # Standalone test run
         profile_to_set = await get_active_profile_from_fsm(state) # Get profile before clearing
         await _clear_fsm_and_set_profile(state, profile_to_set) # Resets state to None if profile exists

@@ -30,7 +30,9 @@ from settings import (
     RAVEN_BASE_DIR,
     RAVEN_FEEDBACK_DISPLAY_TIME_S,
     RAVEN_MATRICES_HEADERS, # Imported
-    BASE_HEADERS # Imported
+    BASE_HEADERS, # Imported
+    TEST_REGISTRY, # New import from settings
+    BATTERY_TEST_SEQUENCE_KEYS # New import from settings
 )
 from utils.image_processors import generate_mr_collage # Not used here, but was in original mental_rotation
 from utils.bot_helpers import (
@@ -40,7 +42,7 @@ from utils.bot_helpers import (
     _safe_delete_message # Added
 )
 from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
-from handlers.common_handlers import TEST_REGISTRY, TEST_SEQUENCE # Import for passing to battery util
+# Removed: from ..common_handlers import TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS 
 from keyboards import (
     ACTION_SELECTION_KEYBOARD_RETURNING,
     ACTION_SELECTION_KEYBOARD_NEW, 
@@ -207,7 +209,7 @@ async def _finish_raven_matrices_test(state: FSMContext, bot_instance: Bot, chat
         await _clear_fsm_and_set_profile(state, profile_to_set) # Clears all but profile keys
         
         if is_battery:
-            if final_trigger_event: await battery_proceed_after_test_completion(state, bot_instance, final_trigger_event, TEST_REGISTRY, TEST_SEQUENCE)
+            if final_trigger_event: await battery_proceed_after_test_completion(state, bot_instance, final_trigger_event, TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS) 
             else: logger.error("Raven Finish: Cannot proceed in battery, missing trigger context.")
         elif profile_to_set and effective_chat_id:
             if final_trigger_event: await send_main_action_menu(bot_instance, final_trigger_event, ACTION_SELECTION_KEYBOARD_RETURNING)

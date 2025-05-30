@@ -26,7 +26,9 @@ from settings import (
     VERBAL_FLUENCY_TASK_POOL,
     VERBAL_FLUENCY_CATEGORY,
     VERBAL_FLUENCY_HEADERS, # Imported
-    BASE_HEADERS # Imported
+    BASE_HEADERS, # Imported
+    TEST_REGISTRY, # New import from settings
+    BATTERY_TEST_SEQUENCE_KEYS # New import from settings
 )
 from utils.bot_helpers import (
     send_main_action_menu,
@@ -35,7 +37,7 @@ from utils.bot_helpers import (
     _safe_delete_message # Added
 )
 from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
-from handlers.common_handlers import TEST_REGISTRY, TEST_SEQUENCE # Import for passing to battery util
+# Removed: from ..common_handlers import TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS 
 
 from keyboards import (
     ACTION_SELECTION_KEYBOARD_RETURNING,
@@ -164,7 +166,7 @@ async def _end_verbal_fluency_test(
             mock_chat = Chat(id=chat_id, type=ChatType.PRIVATE)
             effective_trigger_msg = Message(message_id=0,date=int(time.time()),chat=mock_chat,from_user=mock_user,text="mock")
         if effective_trigger_msg:
-            await battery_proceed_after_test_completion(state, bot_instance, effective_trigger_msg, TEST_REGISTRY, TEST_SEQUENCE)
+            await battery_proceed_after_test_completion(state, bot_instance, effective_trigger_msg, TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS) 
         else: logger.error("VF _end_test: Cannot proceed in battery, missing trigger context and chat_id.")
     elif profile_to_set and chat_id:
         effective_trigger_msg = trigger_event if isinstance(trigger_event, Message) else (trigger_event.message if trigger_event else None)

@@ -32,7 +32,9 @@ from settings import (
     STROOP_INSTRUCTION_TEXT_PART3,
     STROOP_COLORS_DEF,
     STROOP_HEADERS, # Imported
-    BASE_HEADERS # Imported
+    BASE_HEADERS, # Imported
+    TEST_REGISTRY, # New import from settings
+    BATTERY_TEST_SEQUENCE_KEYS # New import from settings
 )
 from utils.image_processors import (
     _generate_stroop_part2_image,
@@ -45,6 +47,7 @@ from utils.bot_helpers import (
     _safe_delete_message,
 )
 from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
+# Removed: from handlers.common_handlers import TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS 
 
 from keyboards import ACTION_SELECTION_KEYBOARD_RETURNING
 
@@ -170,7 +173,13 @@ async def _handle_stroop_critical_error(
     await _clear_fsm_and_set_profile(state, profile_after_error)
 
     if is_battery:
-        await battery_proceed_after_test_completion(state, bot_instance, msg_context)
+        await battery_proceed_after_test_completion(
+            state=state, 
+            bot_instance=bot_instance, 
+            trigger_event=msg_context,
+            test_registry=TEST_REGISTRY, 
+            test_sequence=BATTERY_TEST_SEQUENCE_KEYS 
+        )
     elif profile_after_error:
         await send_main_action_menu(bot_instance, msg_context, ACTION_SELECTION_KEYBOARD_RETURNING, text="Тест прерван из-за ошибки.")
 
@@ -386,7 +395,13 @@ async def handle_stroop_stimulus_response(cb: CallbackQuery, state: FSMContext, 
             await _clear_fsm_and_set_profile(state, profile_to_set)
 
             if is_battery_mode:
-                await battery_proceed_after_test_completion(state, bot, cb.message or _create_mock_message_stroop(chat_id, bot.id if hasattr(bot, "id") else None))
+                await battery_proceed_after_test_completion(
+                    state=state, 
+                    bot_instance=bot, 
+                    trigger_event=cb.message or _create_mock_message_stroop(chat_id, bot.id if hasattr(bot, "id") else None),
+                    test_registry=TEST_REGISTRY, 
+                    test_sequence=BATTERY_TEST_SEQUENCE_KEYS 
+                )
             elif profile_to_set:
                 msg_context_for_menu = cb.message or _create_mock_message_stroop(chat_id, bot.id if hasattr(bot, "id") else None)
                 await send_main_action_menu(bot, msg_context_for_menu, ACTION_SELECTION_KEYBOARD_RETURNING, text="Выберите действие:")

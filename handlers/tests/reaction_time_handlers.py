@@ -31,7 +31,9 @@ from settings import (
     REACTION_TIME_MAX_ATTEMPTS,
     REACTION_TIME_NUM_STIMULI_IN_SEQUENCE,
     REACTION_TIME_HEADERS, # Imported
-    BASE_HEADERS # Imported
+    BASE_HEADERS, # Imported
+    TEST_REGISTRY, # New import from settings
+    BATTERY_TEST_SEQUENCE_KEYS # New import from settings
 )
 from utils.bot_helpers import (
     send_main_action_menu,
@@ -40,6 +42,7 @@ from utils.bot_helpers import (
     _safe_delete_message # Added
 )
 from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
+# Removed: from ..common_handlers import TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS 
 from keyboards import ACTION_SELECTION_KEYBOARD_RETURNING
 
 logger = logging.getLogger(__name__)
@@ -88,7 +91,13 @@ async def _rt_go_to_main_menu_or_clear( state: FSMContext, trigger_message: Mess
         # For RT, if it ends itself (e.g. max attempts), it calls this.
         # If stopped by /stoptest, common_handlers.stop_test_command_handler calls this.
         # We need to ensure that if RT test ends itself within a battery, it calls battery_proceed_after_test_completion
-        # This is now handled in on_rt_retry_no and other places where the test ends by itself.
+        await battery_proceed_after_test_completion(
+            state=state,
+            bot_instance=bot_instance,
+            trigger_event=trigger_message,
+            test_registry=TEST_REGISTRY,
+            test_sequence=BATTERY_TEST_SEQUENCE_KEYS
+        )
 
     elif profile_data: # Standalone mode, profile exists
         await _clear_fsm_and_set_profile(state, profile_data) # Keep profile, clear other states
