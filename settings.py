@@ -65,6 +65,8 @@ ALL_EXPECTED_HEADERS = (
     + STM_HEADERS  # Added STM_HEADERS
 )
 
+TEST_REGISTRY = {} # Moved from common_handlers.py (declaration only)
+
 # --- Stroop Test Constants ---
 STROOP_COLORS_DEF = {
     "Красный": {"rgb": (220, 20, 60), "name": "КРАСНЫЙ", "emoji": "🟥"},
@@ -186,4 +188,3 @@ BATTERY_TEST_SEQUENCE_KEYS = [
 BATTERY_INTER_TEST_PAUSE_S = 30
 BATTERY_MEDICATION_WAIT_MINUTES = 30
 BATTERY_SHEET_NAMES = ["контроль_Ц", "лекарство_Ц"]
-

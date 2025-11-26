@@ -25,16 +25,22 @@ from aiogram.types import (
 from aiogram.filters import StateFilter
 
 from fsm_states import CorsiTestStates, BatteryCycleStates
-from handlers.common_handlers import battery_proceed_after_test_completion
-from settings import ALL_EXPECTED_HEADERS, EXCEL_FILENAME
+from handlers.battery_utils import battery_proceed_after_test_completion # MODIFIED IMPORT
+from settings import (
+    ALL_EXPECTED_HEADERS, 
+    EXCEL_FILENAME, 
+    CORSI_HEADERS, 
+    BASE_HEADERS,
+    TEST_REGISTRY, # New import from settings
+    BATTERY_TEST_SEQUENCE_KEYS # New import from settings
+)
+# Removed: from ..common_handlers import TEST_REGISTRY, BATTERY_TEST_SEQUENCE_KEYS 
 from utils.bot_helpers import (
     send_main_action_menu,
     get_active_profile_from_fsm,
-    _clear_fsm_and_set_profile, # <--- ИЗМЕНЕННЫЙ ИМПОРТ
-    _safe_delete_message,       # <--- ИЗМЕНЕННЫЙ ИМПОРТ
+    _clear_fsm_and_set_profile, 
+    _safe_delete_message,       
 )
-
-# Импортируем _clear_fsm_and_set_profile для использования при завершении теста
 
 from keyboards import ACTION_SELECTION_KEYBOARD_RETURNING
 
@@ -71,12 +77,8 @@ async def _safe_delete_corsi_specific_message(
             logger.error(
                 f"Corsi: Ошибка удаления ID {message_id} (ключ: {fsm_key}): {e}. {context_info}"
             )
-        # Do not clear the key from FSM here, cleanup_corsi_messages will handle FSM data.
-        # Or, if called outside full cleanup, it can be cleared:
-        # await state.update_data({fsm_key: None})
 
 
-# --- Test Logic Functions ---
 async def cleanup_corsi_messages(
     state: FSMContext, bot_instance: Bot, final_text: Optional[str] = None
 ):
@@ -92,22 +94,14 @@ async def cleanup_corsi_messages(
         ]
         for key in corsi_message_ids_keys:
             msg_id_to_del = data.get(key)
-            if msg_id_to_del:  # Check if msg_id exists before calling helper
+            if msg_id_to_del: 
                 await _safe_delete_corsi_specific_message(
                     bot_instance, state, key, "cleanup_corsi_messages"
                 )
-                # _safe_delete_corsi_specific_message does not clear FSM keys by default
-                # so we clear them here after attempting deletion.
                 current_data_for_key_clear = await state.get_data()
                 if key in current_data_for_key_clear:
                     del current_data_for_key_clear[key]
                     await state.set_data(current_data_for_key_clear)
-
-    # FSM data cleaning will be handled by _clear_fsm_and_set_profile
-    # or by stop_test_command_handler if interrupted.
-    # This function should focus on UI cleanup.
-    # The caller (evaluate_user_sequence or stop_test_command_handler)
-    # will be responsible for the final FSM state.
     logger.info(
         f"Corsi cleanup: UI-специфичные сообщения для чата {chat_id or 'N/A'} обработаны."
     )
@@ -133,13 +127,12 @@ async def show_corsi_sequence(
         logger.error(
             "Corsi (show_sequence): corsi_chat_id не найден в FSM. Тест не может продолжаться."
         )
-        # UI cleanup should be done by caller if this fails critically
         await trigger_source_msg.answer(
             "Ошибка конфигурации Теста Корси. Пожалуйста, /start и попробуйте снова."
         )
         await _clear_fsm_and_set_profile(
             state, await get_active_profile_from_fsm(state)
-        )  # Clear to profile or empty
+        ) 
         return
 
     indices = list(range(9))
@@ -165,7 +158,7 @@ async def show_corsi_sequence(
     base_markup = InlineKeyboardMarkup(inline_keyboard=base_grid_rows)
     grid_message_text = "Тест Корси: Запоминание Последовательности"
 
-    try:  # Send/Edit Grid Message
+    try: 
         if grid_msg_id:
             await bot_instance.edit_message_text(
                 chat_id=corsi_chat_id,
@@ -187,7 +180,6 @@ async def show_corsi_sequence(
         await trigger_source_msg.answer(
             "Критическая ошибка в Тесте Корси. Пожалуйста, /start."
         )
-        # Cleanup and reset FSM
         await cleanup_corsi_messages(
             state, bot_instance, "Критическая ошибка отображения сетки"
         )
@@ -288,12 +280,12 @@ async def show_corsi_sequence(
                 break
         except (
             Exception
-        ) as e_flash:  # Catch broader exceptions during flashing
+        ) as e_flash: 
             logger.error(
                 f"Corsi (show_sequence): Ошибка при подсветке: {e_flash}",
                 exc_info=True,
             )
-            break  # Stop flashing if an error occurs
+            break 
 
     if await state.get_state() != CorsiTestStates.showing_sequence.state:
         return
@@ -352,7 +344,6 @@ async def handle_corsi_button_press(
             await callback.message.answer(
                 "Произошла ошибка с Тестом Корси. Пожалуйста, /start."
             )
-        # Cleanup UI and FSM
         await cleanup_corsi_messages(
             state,
             bot,
@@ -448,7 +439,6 @@ async def evaluate_user_sequence(
                 logger.warning(
                     f"Corsi eval: Не удалось изменить фидбэк '{text}'. Попытка переотправки. Ошибка: {tb_err}"
                 )
-                # Use the main _safe_delete_message from common_handlers, or a local one for Corsi
                 await _safe_delete_corsi_specific_message(
                     bot_instance,
                     state,
@@ -512,70 +502,58 @@ async def evaluate_user_sequence(
     if (
         await state.get_state()
         != CorsiTestStates.waiting_for_user_sequence.state
-    ):
+    ): # Check state again after sleep
         return
 
     if test_should_continue:
         await state.set_state(CorsiTestStates.showing_sequence)
         await show_corsi_sequence(trigger_message, state, bot_instance)
-    else:
+    else: # Test finished (either max length or too many errors)
         logger.info(f"Тест Корси завершается для чата {chat_id}.")
+        
+        # Determine if this is part of a battery
+        is_battery_mode = (await state.get_state()) in BatteryCycleStates # Simplified check, refine if needed
+        
         await save_corsi_results(
-            trigger_message, state, bot_instance, is_interrupted=False
+            trigger_msg_context=trigger_message, # Pass the original message/cb.message
+            state=state, 
+            bot_instance=bot_instance, 
+            is_interrupted=False,
+            target_sheet_name=data.get("current_battery_phase") + "_Ц" if is_battery_mode and data.get("current_battery_phase") else None
         )
-        await cleanup_corsi_messages(
-            state, bot_instance, "Тест Корси штатно завершен."
-        )
-
-        # Получаем профиль перед его финальной установкой и удалением common_status_msg
+        await cleanup_corsi_messages(state, bot_instance, "Тест Корси штатно завершен.")
+        
+        # Common post-test logic
         profile_to_set = await get_active_profile_from_fsm(state)
-
-        # Удаляем общее сообщение "Подготовка к тесту..."
         fsm_data_for_common_msg_del = await state.get_data()
-        common_status_msg_id = fsm_data_for_common_msg_del.get(
-            "status_message_id_to_delete_later"
-        )
+        common_status_msg_id = fsm_data_for_common_msg_del.get("status_message_id_to_delete_later")
+
         if common_status_msg_id and chat_id:
-            # Используем общую функцию _safe_delete_message, т.к. это не специфичное для Корси сообщение
-            await _safe_delete_message(
-                bot_instance,
-                chat_id,
-                common_status_msg_id,
-                "Corsi normal completion common status",
+            await _safe_delete_message(bot_instance, chat_id, common_status_msg_id, "Corsi normal completion common status")
+
+        await _clear_fsm_and_set_profile(state, profile_to_set)
+
+        if is_battery_mode:
+            await battery_proceed_after_test_completion(
+                state=state, 
+                bot_instance=bot_instance, 
+                trigger_event=trigger_message,
+                test_registry=TEST_REGISTRY, 
+                test_sequence=BATTERY_TEST_SEQUENCE_KEYS 
             )
-            # Ключ status_message_id_to_delete_later будет удален _clear_fsm_and_set_profile
-            # или если profile_to_set его не содержит.
-
-        # Очищаем FSM и устанавливаем только профиль
-        await _clear_fsm_and_set_profile(
-            state, profile_to_set
-        )  # Устанавливает state=None
-
-        if (
-            profile_to_set
-        ):  # Проверяем, что профиль валиден после всех операций
+        elif profile_to_set:
             await send_main_action_menu(
-                bot_instance,
-                trigger_message,
-                ACTION_SELECTION_KEYBOARD_RETURNING,
-                text="Тест Корси завершен. Выберите следующее действие:",
-            )
+                bot_instance, trigger_message, ACTION_SELECTION_KEYBOARD_RETURNING,
+                text="Тест Корси завершен. Выберите следующее действие:")
         else:
-            logger.warning(
-                f"Corsi eval: Тест завершен, но активный профиль не найден в FSM для чата {chat_id}."
-            )
-            await trigger_message.answer(
-                "Тест Корси завершен. Ваш профиль не найден. Пожалуйста, /start."
-            )
-            # FSM уже очищен _clear_fsm_and_set_profile
+            logger.warning(f"Corsi eval: Тест завершен, но активный профиль не найден в FSM для чата {chat_id}.")
+            await trigger_message.answer("Тест Корси завершен. Ваш профиль не найден. Пожалуйста, /start.")
 
 
 async def start_corsi_test(
     trigger_event: Union[Message, CallbackQuery],
     state: FSMContext,
-    profile: Dict[
-        str, Any
-    ],  # Profile data from get_active_profile_from_fsm (standardized keys)
+    profile: Dict[str, Any], 
     bot_instance: Bot,
 ):
     source_message = (
@@ -587,13 +565,13 @@ async def start_corsi_test(
 
     await state.set_state(CorsiTestStates.showing_sequence)
 
-    uid = profile.get("unique_id")  # Используем стандартизированные ключи
+    uid = profile.get("unique_id") 
     name = profile.get("name")
     age = profile.get("age")
     tg_id = profile.get("telegram_id")
 
     initial_test_data = {
-        "unique_id_for_test": uid,
+        "unique_id_for_test": uid, # Storing for save_results if not in battery
         "profile_name_for_test": name,
         "profile_age_for_test": age,
         "profile_telegram_id_for_test": tg_id,
@@ -608,8 +586,6 @@ async def start_corsi_test(
         "corsi_status_message_id": None,
         "corsi_feedback_message_id": None,
     }
-    # Добавляем к существующим данным FSM (профиль уже должен быть там с active_* ключами,
-    # и status_message_id_to_delete_later от common_handlers)
     await state.update_data(**initial_test_data)
     logger.info(f"Тест Корси запущен для UID {uid} в чате {test_chat_id}.")
 
@@ -617,243 +593,173 @@ async def start_corsi_test(
 
 
 async def save_corsi_results(
-    trigger_msg_context: Message,
+    trigger_msg_context: Message, 
     state: FSMContext,
-    bot_instance: Bot,
+    bot_instance: Bot, 
     is_interrupted: bool = False,
+    target_sheet_name: Optional[str] = None, # New parameter
 ):
     data = await state.get_data()
 
-    uid = data.get("unique_id_for_test")
-    p_name = data.get("profile_name_for_test")
-    p_age = data.get("profile_age_for_test")
-    p_tgid = data.get("profile_telegram_id_for_test")
+    uid = data.get("original_user_uid") or data.get("unique_id_for_test") # Prefer battery UID
+    
+    # Fetch fresh profile info if possible, especially if in battery mode
+    profile_info = await get_active_profile_from_fsm(state) # This gives active_unique_id etc.
+    if profile_info and profile_info.get('unique_id') == uid:
+        p_name = profile_info.get("name")
+        p_age = profile_info.get("age")
+        p_tgid = profile_info.get("telegram_id")
+    else: # Fallback to test-specific stored info if any, or defaults
+        p_name = data.get("profile_name_for_test")
+        p_age = data.get("profile_age_for_test")
+        p_tgid = data.get("profile_telegram_id_for_test")
+
 
     if not uid:
-        logger.warning(
-            "Corsi save: unique_id_for_test не найден в FSM. Попытка извлечь из активного профиля."
-        )
-        active_profile = await get_active_profile_from_fsm(
-            state
-        )  # Вернет стандартизированные ключи
-        if active_profile and active_profile.get("unique_id"):
-            uid = active_profile.get("unique_id")
-            p_name = active_profile.get("name", p_name)
-            p_age = active_profile.get("age", p_age)
-            p_tgid = active_profile.get("telegram_id", p_tgid)
-            logger.info(
-                f"Corsi save: Используются данные из активного профиля для UID {uid}."
-            )
-        else:
-            logger.error(
-                "Corsi save: КРИТИЧЕСКАЯ ОШИБКА - Не найден UID для сохранения результатов."
-            )
-            if (
-                await state.get_state() is not None
-            ):  # Only send if state is somewhat active
-                await trigger_msg_context.answer(
-                    "Тест Корси: Ошибка сохранения (ID пользователя не найден)."
-                )
-            return
+        logger.error("Corsi save: КРИТИЧЕСКАЯ ОШИБКА - Не найден UID для сохранения результатов.")
+        if await state.get_state() is not None:
+            await trigger_msg_context.answer("Тест Корси: Ошибка сохранения (ID пользователя не найден).")
+        return
 
     seq_times = data.get("sequence_times", [])
     max_len = 0
-    if seq_times and all(
-        isinstance(item, dict) and "len" in item for item in seq_times
-    ):
+    if seq_times and all(isinstance(item, dict) and "len" in item for item in seq_times):
         max_len = max(item["len"] for item in seq_times) if seq_times else 0
 
     avg_time_per_el = 0.0
-    valid_times = [
-        item
-        for item in seq_times
-        if isinstance(item, dict)
-        and item.get("len", 0) > 0
-        and isinstance(item.get("time"), (int, float))
-        and item.get("time", -1) >= 0
-    ]
+    valid_times = [item for item in seq_times if isinstance(item, dict) and item.get("len", 0) > 0 and isinstance(item.get("time"), (int, float)) and item.get("time", -1) >= 0]
     if valid_times:
-        try:
-            avg_time_per_el = sum(
-                item["time"] / item["len"] for item in valid_times
-            ) / len(valid_times)
-        except ZeroDivisionError:
-            avg_time_per_el = 0.0
+        try: avg_time_per_el = sum(item["time"] / item["len"] for item in valid_times) / len(valid_times)
+        except ZeroDivisionError: avg_time_per_el = 0.0
 
-    seq_details = (
-        "; ".join(
-            [f"Дл.{item['len']}-{item['time']:.2f}с" for item in valid_times]
-        )
-        or "Нет данных"
-    )
+    seq_details = "; ".join([f"Дл.{item['len']}-{item['time']:.2f}с" for item in valid_times]) or "Нет данных"
     interrupted_str = "Да" if is_interrupted else "Нет"
 
-    try:
-        from openpyxl import load_workbook
+    from openpyxl import load_workbook # Local import to avoid issues if not always available
 
+    try:
         if not os.path.exists(EXCEL_FILENAME):
-            logger.error(
-                f"Corsi save: Файл Excel '{EXCEL_FILENAME}' не найден."
-            )
+            logger.error(f"Corsi save: Файл Excel '{EXCEL_FILENAME}' не найден.")
             if await state.get_state() is not None:
-                await trigger_msg_context.answer(
-                    f"Ошибка: Файл для сохранения ('{EXCEL_FILENAME}') не найден."
-                )
+                await trigger_msg_context.answer(f"Ошибка: Файл для сохранения ('{EXCEL_FILENAME}') не найден.")
             return
 
         wb = load_workbook(EXCEL_FILENAME)
-        ws = wb.active
-        excel_headers = [cell.value for cell in ws[1]]
-        if "Unique ID" not in excel_headers:
-            raise ValueError("Столбец 'Unique ID' не найден в Excel.")
+        
+        ws = None
+        if target_sheet_name and target_sheet_name in wb.sheetnames:
+            ws = wb[target_sheet_name]
+            logger.info(f"Corsi save: Сохранение в указанный лист: '{target_sheet_name}' для UID {uid}.")
+        elif wb.sheetnames: 
+            ws = wb[wb.sheetnames[0]] # Fallback to first sheet
+            logger.warning(f"Corsi save: Лист '{target_sheet_name}' не найден или не указан. Используется лист: '{ws.title}' для UID {uid}.")
+        else: 
+            logger.error(f"Corsi save: В Excel файле '{EXCEL_FILENAME}' нет листов. Невозможно сохранить UID {uid}.")
+            return
 
-        uid_col_excel_idx = excel_headers.index("Unique ID")
+        # Headers for this sheet should be ALL_EXPECTED_HEADERS
+        sheet_headers = [cell.value for cell in ws[1]] if ws.max_row > 0 else []
+        if not sheet_headers or "Unique ID" not in sheet_headers:
+            logger.error(f"Corsi save: Лист '{ws.title}' не содержит валидных заголовков ('Unique ID' отсутствует).")
+            # Consider re-initializing if in critical error state, or simply return
+            return 
+
+        header_to_idx_map = {header: idx for idx, header in enumerate(sheet_headers)}
+        
         target_row_num_excel = -1
-        for r_num_excel, row_data_tuple in enumerate(
-            ws.iter_rows(min_row=2, values_only=True), start=2
-        ):
-            if (
-                len(row_data_tuple) > uid_col_excel_idx
-                and row_data_tuple[uid_col_excel_idx] is not None
-                and str(row_data_tuple[uid_col_excel_idx]) == str(uid)
-            ):
-                target_row_num_excel = r_num_excel
-                break
+        uid_col_idx = header_to_idx_map.get("Unique ID") # uid_col_idx is 0-based index
 
-        if target_row_num_excel == -1:
-            logger.info(
-                f"Corsi save: UID {uid} не найден, добавление новой строки."
-            )
-            new_row_values = [""] * len(
-                excel_headers
-            )  # Base on actual excel headers count
-            new_row_values[uid_col_excel_idx] = (
-                uid  # Set UID in its actual column
-            )
-            # Populate other known base headers if they exist in excel_headers
-            if p_name and "Name" in excel_headers:
-                new_row_values[excel_headers.index("Name")] = p_name
-            if p_age and "Age" in excel_headers:
-                new_row_values[excel_headers.index("Age")] = p_age
-            if p_tgid and "Telegram ID" in excel_headers:
-                new_row_values[excel_headers.index("Telegram ID")] = p_tgid
-            ws.append(new_row_values)
+        for r_num, row_values_tuple in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if uid_col_idx is not None and len(row_values_tuple) > uid_col_idx and \
+               row_values_tuple[uid_col_idx] is not None and str(row_values_tuple[uid_col_idx]) == str(uid):
+                target_row_num_excel = r_num
+                break
+        
+        if target_row_num_excel == -1: # UID not found, append new row
+            logger.info(f"Corsi save: UID {uid} не найден в листе '{ws.title}', добавление новой строки.")
+            new_row_data = [""] * len(sheet_headers)
+            if uid_col_idx is not None: new_row_data[uid_col_idx] = uid
+            
+            # Populate BASE_HEADERS
+            for base_header in BASE_HEADERS:
+                if base_header in header_to_idx_map:
+                    col_idx_for_base = header_to_idx_map[base_header]
+                    if base_header == "Name" and p_name: new_row_data[col_idx_for_base] = p_name
+                    elif base_header == "Age" and p_age: new_row_data[col_idx_for_base] = p_age
+                    elif base_header == "Telegram ID" and p_tgid: new_row_data[col_idx_for_base] = p_tgid
+            
+            ws.append(new_row_data)
             target_row_num_excel = ws.max_row
 
-        corsi_headers_map = {}
-        for h_name in [
-            "Corsi - Max Correct Sequence Length",
-            "Corsi - Avg Time Per Element (s)",
-            "Corsi - Sequence Times Detail",
-            "Corsi - Interrupted",
-        ]:
-            if h_name in excel_headers:
-                corsi_headers_map[h_name] = excel_headers.index(h_name) + 1
+        # Write CORSI_HEADERS data
+        corsi_data_to_write = {
+            "Corsi - Max Correct Sequence Length": max_len,
+            "Corsi - Avg Time Per Element (s)": round(avg_time_per_el, 2),
+            "Corsi - Sequence Times Detail": seq_details,
+            "Corsi - Interrupted": interrupted_str,
+        }
+        for header_key, value_to_write in corsi_data_to_write.items():
+            if header_key in header_to_idx_map:
+                col_idx = header_to_idx_map[header_key]
+                ws.cell(row=target_row_num_excel, column=col_idx + 1).value = value_to_write
             else:
-                logger.warning(
-                    f"Corsi save: Заголовок '{h_name}' не найден в Excel. Пропуск."
-                )
+                logger.warning(f"Corsi save: Заголовок '{header_key}' не найден в листе '{ws.title}'. Пропуск данных.")
 
-        if "Corsi - Max Correct Sequence Length" in corsi_headers_map:
-            ws.cell(
-                row=target_row_num_excel,
-                column=corsi_headers_map[
-                    "Corsi - Max Correct Sequence Length"
-                ],
-            ).value = max_len
-        if "Corsi - Avg Time Per Element (s)" in corsi_headers_map:
-            ws.cell(
-                row=target_row_num_excel,
-                column=corsi_headers_map["Corsi - Avg Time Per Element (s)"],
-            ).value = round(avg_time_per_el, 2)
-        if "Corsi - Sequence Times Detail" in corsi_headers_map:
-            ws.cell(
-                row=target_row_num_excel,
-                column=corsi_headers_map["Corsi - Sequence Times Detail"],
-            ).value = seq_details
-        if "Corsi - Interrupted" in corsi_headers_map:
-            ws.cell(
-                row=target_row_num_excel,
-                column=corsi_headers_map["Corsi - Interrupted"],
-            ).value = interrupted_str
+        # Ensure BASE_HEADERS are up-to-date in the found/created row
+        for base_header in BASE_HEADERS:
+            if base_header in header_to_idx_map:
+                col_idx_for_base = header_to_idx_map[base_header]
+                current_val = ws.cell(row=target_row_num_excel, column=col_idx_for_base + 1).value
+                if base_header == "Name" and p_name and current_val != p_name:
+                    ws.cell(row=target_row_num_excel, column=col_idx_for_base + 1).value = p_name
+                elif base_header == "Age" and p_age and current_val != p_age:
+                     ws.cell(row=target_row_num_excel, column=col_idx_for_base + 1).value = p_age
+                elif base_header == "Telegram ID" and p_tgid and current_val != p_tgid: # Ensure TG ID is also there
+                     ws.cell(row=target_row_num_excel, column=col_idx_for_base + 1).value = p_tgid
+
 
         wb.save(EXCEL_FILENAME)
-        logger.info(
-            f"Результаты Теста Корси для UID {uid} (Прерван: {is_interrupted}) сохранены."
-        )
+        logger.info(f"Результаты Теста Корси для UID {uid} (Прерван: {is_interrupted}) сохранены в лист '{ws.title}'.")
 
     except FileNotFoundError:
-        logger.error(
-            f"Corsi save: Файл Excel '{EXCEL_FILENAME}' не найден (повторно)."
-        )
-        if await state.get_state() is not None:
-            await trigger_msg_context.answer(
-                f"Критическая ошибка: Файл для сохранения ('{EXCEL_FILENAME}') не найден."
-            )
-    except ValueError as ve_excel:
-        logger.error(
-            f"Corsi save: Ошибка конфигурации Excel для UID {uid}: {ve_excel}",
-            exc_info=True,
-        )
-        if await state.get_state() is not None:
-            await trigger_msg_context.answer(
-                "Ошибка конфигурации при сохранении Теста Корси."
-            )
+        logger.error(f"Corsi save: Файл Excel '{EXCEL_FILENAME}' не найден (повторно).")
+        if await state.get_state() is not None: await trigger_msg_context.answer(f"Критическая ошибка: Файл для сохранения ('{EXCEL_FILENAME}') не найден.")
+    except ValueError as ve_excel: # For header not found issues
+        logger.error(f"Corsi save: Ошибка конфигурации Excel для UID {uid} в листе '{target_sheet_name or ws.title if 'ws' in locals() else 'default'}': {ve_excel}", exc_info=True)
+        if await state.get_state() is not None: await trigger_msg_context.answer("Ошибка конфигурации при сохранении Теста Корси.")
     except Exception as e_excel_gen:
-        logger.error(
-            f"Corsi save: Общая ошибка сохранения в Excel для UID {uid}: {e_excel_gen}",
-            exc_info=True,
-        )
-        if await state.get_state() is not None:
-            await trigger_msg_context.answer(
-                "Непредвиденная ошибка при сохранении Теста Корси."
-            )
+        logger.error(f"Corsi save: Общая ошибка сохранения в Excel для UID {uid} в листе '{target_sheet_name or ws.title if 'ws' in locals() else 'default'}': {e_excel_gen}", exc_info=True)
+        if await state.get_state() is not None: await trigger_msg_context.answer("Непредвиденная ошибка при сохранении Теста Корси.")
 
-    # Send summary message to user if test was not abruptly stopped (i.e., state is still somewhat valid)
-    if await state.get_state() is not None:
-        summary_status = (
-            "ПРЕРВАНЫ И СОХРАНЕНЫ" if is_interrupted else "УСПЕШНО СОХРАНЕНЫ"
-        )
-        msg_parts = [
-            f"Результаты Теста Корси для UID {uid} <b>{summary_status}</b>:"
-        ]
+    current_fsm_state_name = await state.get_state()
+    if current_fsm_state_name and not current_fsm_state_name.startswith(BatteryCycleStates.__name__): # Only send summary if not in battery cycle (battery handles its own flow)
+        summary_status = "ПРЕРВАНЫ И СОХРАНЕНЫ" if is_interrupted else "УСПЕШНО СОХРАНЕНЫ"
+        msg_parts = [f"Результаты Теста Корси для UID {uid} <b>{summary_status}</b>:"]
         if not (is_interrupted and max_len == 0 and not valid_times):
-            msg_parts.extend(
-                [
-                    f"— Максимальная длина верной последовательности: {max_len}",
-                    f"— Среднее время на элемент: {round(avg_time_per_el, 2)} сек",
-                ]
-            )
-            if seq_details != "Нет данных":
-                msg_parts.append(f"— Детализация по сериям: {seq_details}")
-            elif not is_interrupted and not valid_times:
-                msg_parts.append(
-                    "— Детализация по сериям: Нет выполненных верных последовательностей."
-                )
+            msg_parts.extend([
+                f"— Максимальная длина верной последовательности: {max_len}",
+                f"— Среднее время на элемент: {round(avg_time_per_el, 2)} сек",
+            ])
+            if seq_details != "Нет данных": msg_parts.append(f"— Детализация по сериям: {seq_details}")
+            elif not is_interrupted and not valid_times: msg_parts.append("— Детализация по сериям: Нет выполненных верных последовательностей.")
         else:
-            msg_parts = [
-                f"Тест Корси для UID {uid} был <b>ПРЕРВАН</b> досрочно. Результаты не зафиксированы."
-            ]
+            msg_parts = [f"Тест Корси для UID {uid} был <b>ПРЕРВАН</b> досрочно. Результаты не зафиксированы."]
         try:
-            await trigger_msg_context.answer(
-                "\n".join(msg_parts), parse_mode=ParseMode.HTML
-            )
+            await trigger_msg_context.answer("\n".join(msg_parts), parse_mode=ParseMode.HTML)
         except Exception as e_ans:
-            logger.error(
-                f"Corsi save: Не удалось отправить итог (UID {uid}): {e_ans}"
-            )
+            logger.error(f"Corsi save: Не удалось отправить итог (UID {uid}): {e_ans}")
 
 
 @router.callback_query(
     F.data == CORSI_STOP_CALLBACK_DATA, StateFilter(CorsiTestStates)
-)  # Changed to generic stop
+) 
 async def on_corsi_stop_button_generic(
     callback: CallbackQuery, state: FSMContext, bot: Bot
 ):
     logger.info(
         f"Тест Корси: запрос на остановку через кнопку (UID: {callback.from_user.id})."
     )
-    from handlers.common_handlers import stop_test_command_handler
+    from handlers.common_handlers import stop_test_command_handler # Local import to avoid circular if module level
 
     await callback.answer("Останавливаю Тест Корси...", show_alert=False)
     await stop_test_command_handler(
@@ -862,3 +768,5 @@ async def on_corsi_stop_button_generic(
         bot=bot,
         called_from_test_button=True,
     )
+
+[end of handlers/tests/corsi_handlers.py]
